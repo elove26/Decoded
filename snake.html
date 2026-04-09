@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake Game</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+      color: #eee;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 12px;
+      color: #4ade80;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+
+    #scoreboard {
+      display: flex;
+      gap: 40px;
+      margin-bottom: 16px;
+      font-size: 1rem;
+      color: #aaa;
+    }
+
+    #scoreboard span {
+      color: #fff;
+      font-weight: bold;
+    }
+
+    #canvas {
+      border: 3px solid #4ade80;
+      border-radius: 4px;
+      box-shadow: 0 0 30px rgba(74, 222, 128, 0.3);
+      display: block;
+    }
+
+    #overlay {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    #message {
+      font-size: 2rem;
+      font-weight: bold;
+      color: #4ade80;
+      letter-spacing: 2px;
+    }
+
+    #sub-message {
+      font-size: 0.95rem;
+      color: #aaa;
+    }
+
+    #start-btn {
+      margin-top: 8px;
+      padding: 10px 28px;
+      background: #4ade80;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: background 0.2s;
+    }
+
+    #start-btn:hover {
+      background: #86efac;
+    }
+
+    #controls {
+      margin-top: 16px;
+      font-size: 0.8rem;
+      color: #555;
+      text-align: center;
+      line-height: 1.8;
+    }
+
+    .wrapper {
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <h1>Snake</h1>
+  <div id="scoreboard">
+    Score: <span id="score">0</span>&nbsp;&nbsp; High Score: <span id="high-score">0</span>
+  </div>
+  <div class="wrapper">
+    <canvas id="canvas" width="400" height="400"></canvas>
+    <div id="overlay">
+      <div id="message">SNAKE</div>
+      <div id="sub-message">Use arrow keys or WASD to move</div>
+      <button id="start-btn">Start Game</button>
+    </div>
+  </div>
+  <div id="controls">
+    Arrow Keys / WASD to move &nbsp;|&nbsp; P to pause
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('overlay');
+    const message = document.getElementById('message');
+    const subMessage = document.getElementById('sub-message');
+    const startBtn = document.getElementById('start-btn');
+    const scoreEl = document.getElementById('score');
+    const highScoreEl = document.getElementById('high-score');
+
+    const GRID = 20;
+    const COLS = canvas.width / GRID;
+    const ROWS = canvas.height / GRID;
+    const TICK_MS = 120;
+
+    let snake, dir, nextDir, food, score, highScore, paused, gameOver, intervalId;
+
+    highScore = parseInt(localStorage.getItem('snakeHighScore') || '0');
+    highScoreEl.textContent = highScore;
+
+    function randomCell(exclude = []) {
+      let cell;
+      do {
+        cell = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
+      } while (exclude.some(s => s.x === cell.x && s.y === cell.y));
+      return cell;
+    }
+
+    function init() {
+      const startX = Math.floor(COLS / 2);
+      const startY = Math.floor(ROWS / 2);
+      snake = [
+        { x: startX, y: startY },
+        { x: startX - 1, y: startY },
+        { x: startX - 2, y: startY },
+      ];
+      dir = { x: 1, y: 0 };
+      nextDir = { x: 1, y: 0 };
+      score = 0;
+      paused = false;
+      gameOver = false;
+      scoreEl.textContent = 0;
+      food = randomCell(snake);
+      overlay.style.display = 'none';
+    }
+
+    function step() {
+      if (paused || gameOver) return;
+
+      dir = nextDir;
+      const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+      // Wall collision
+      if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
+        endGame();
+        return;
+      }
+
+      // Self collision
+      if (snake.some(s => s.x === head.x && s.y === head.y)) {
+        endGame();
+        return;
+      }
+
+      snake.unshift(head);
+
+      if (head.x === food.x && head.y === food.y) {
+        score++;
+        scoreEl.textContent = score;
+        if (score > highScore) {
+          highScore = score;
+          highScoreEl.textContent = highScore;
+          localStorage.setItem('snakeHighScore', highScore);
+        }
+        food = randomCell(snake);
+      } else {
+        snake.pop();
+      }
+
+      draw();
+    }
+
+    function draw() {
+      // Background
+      ctx.fillStyle = '#0f0f1a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Grid (subtle)
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.lineWidth = 0.5;
+      for (let x = 0; x <= COLS; x++) {
+        ctx.beginPath();
+        ctx.moveTo(x * GRID, 0);
+        ctx.lineTo(x * GRID, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= ROWS; y++) {
+        ctx.beginPath();
+        ctx.moveTo(0, y * GRID);
+        ctx.lineTo(canvas.width, y * GRID);
+        ctx.stroke();
+      }
+
+      // Food
+      const fx = food.x * GRID + GRID / 2;
+      const fy = food.y * GRID + GRID / 2;
+      ctx.fillStyle = '#f87171';
+      ctx.beginPath();
+      ctx.arc(fx, fy, GRID / 2 - 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Snake
+      snake.forEach((seg, i) => {
+        const x = seg.x * GRID;
+        const y = seg.y * GRID;
+        const inset = 1;
+
+        if (i === 0) {
+          // Head — brighter
+          ctx.fillStyle = '#4ade80';
+        } else {
+          // Body — gradient toward tail
+          const ratio = 1 - i / snake.length;
+          const g = Math.floor(160 + ratio * 62);
+          ctx.fillStyle = `rgb(30, ${g}, 80)`;
+        }
+
+        ctx.beginPath();
+        ctx.roundRect(x + inset, y + inset, GRID - inset * 2, GRID - inset * 2, 4);
+        ctx.fill();
+
+        // Eyes on head
+        if (i === 0) {
+          ctx.fillStyle = '#0f0f1a';
+          const eyeSize = 2.5;
+          if (dir.x === 1) {
+            ctx.beginPath(); ctx.arc(x + GRID - 5, y + 5, eyeSize, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x + GRID - 5, y + GRID - 5, eyeSize, 0, Math.PI * 2); ctx.fill();
+          } else if (dir.x === -1) {
+            ctx.beginPath(); ctx.arc(x + 5, y + 5, eyeSize, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x + 5, y + GRID - 5, eyeSize, 0, Math.PI * 2); ctx.fill();
+          } else if (dir.y === -1) {
+            ctx.beginPath(); ctx.arc(x + 5, y + 5, eyeSize, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x + GRID - 5, y + 5, eyeSize, 0, Math.PI * 2); ctx.fill();
+          } else {
+            ctx.beginPath(); ctx.arc(x + 5, y + GRID - 5, eyeSize, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x + GRID - 5, y + GRID - 5, eyeSize, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+      });
+    }
+
+    function endGame() {
+      gameOver = true;
+      clearInterval(intervalId);
+      message.textContent = 'GAME OVER';
+      subMessage.textContent = `Score: ${score}`;
+      startBtn.textContent = 'Play Again';
+      overlay.style.display = 'flex';
+    }
+
+    function startGame() {
+      clearInterval(intervalId);
+      init();
+      draw();
+      intervalId = setInterval(step, TICK_MS);
+    }
+
+    startBtn.addEventListener('click', startGame);
+
+    document.addEventListener('keydown', e => {
+      switch (e.key) {
+        case 'ArrowUp':    case 'w': case 'W':
+          if (dir.y !== 1)  nextDir = { x: 0, y: -1 }; break;
+        case 'ArrowDown':  case 's': case 'S':
+          if (dir.y !== -1) nextDir = { x: 0, y: 1 };  break;
+        case 'ArrowLeft':  case 'a': case 'A':
+          if (dir.x !== 1)  nextDir = { x: -1, y: 0 }; break;
+        case 'ArrowRight': case 'd': case 'D':
+          if (dir.x !== -1) nextDir = { x: 1, y: 0 };  break;
+        case 'p': case 'P':
+          if (!gameOver) paused = !paused; break;
+      }
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+
+    // Draw initial state
+    draw();
+  </script>
+</body>
+</html>
